@@ -1,0 +1,49 @@
+name: Solo_v1
+backbone: 'resnet50'
+pretrained: ''
+backbone_args:
+  pretrained: true
+
+fpn_args:
+  in_chans: [256, 512, 1024, 2048]
+  mid_chans: 256
+  inplace: true
+  use_p6: true
+  for_detect: true
+
+head: 'SoloHead'
+head_args:
+  num_classes: 81
+  in_channels: 256
+  feat_channels: 256
+  stacked_convs: 7
+  cate_down_pos: 0
+  strides: [4, 8, 16, 32, 64]
+  grid_num: [40,36,24,16,12]
+  scale_ranges: [[1, 96], [48, 192], [96, 384], [192, 768], [384, 2048]]
+  conv_cfg: null
+  norm_cfg:
+    type: 'GN'
+    num_groups: 32
+    requires_grad: true
+
+loss: 'SoloLoss'
+loss_args:
+  sigma: 0.1
+  mask_loss_weight: 3.0
+  num_classes: 81
+  strides: [4, 8, 16, 32, 64]
+  grid_num: [40,36,24,16,12]
+  scale_ranges: [[1, 96], [48, 192], [96, 384], [192, 768], [384, 2048]]
+
+
+post_process: 'SoloPost'
+post_process_args:
+  score_thr: 0.1
+  mask_thr: 0.5
+  update_thr: 0.05
+
+  nms_pre: 500
+  kernel: 'gaussian'
+  sigma: 2.0
+  max_per_img: 100
