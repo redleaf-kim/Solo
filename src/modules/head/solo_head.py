@@ -93,13 +93,13 @@ class SoloHead(nn.Module):
 
 
     def init_weights(self):
-        for m in self.ins_convs:
+        for m in self.mask_convs:
             normal_init(m.conv, std=0.01)
         for m in self.cate_convs:
             normal_init(m.conv, std=0.01)
-        bias_ins = bias_init_with_prob(0.01)
-        for m in self.solo_ins_list:
-            normal_init(m, std=0.01, bias=bias_ins)
+        bias_mask = bias_init_with_prob(0.01)
+        for m in self.solo_mask:
+            normal_init(m, std=0.01, bias=bias_mask)
         bias_cate = bias_init_with_prob(0.01)
         normal_init(self.solo_cate, std=0.01, bias=bias_cate)
 
