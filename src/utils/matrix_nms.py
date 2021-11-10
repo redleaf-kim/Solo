@@ -4,52 +4,39 @@
 import torch
 
 
-def matrix_nms(seg_masks, cate_labels, cate_scores, kernel='gaussian', sigma=2.0, sum_masks=None):
+def matrix_nms(masks, labels, scores, kernel='gaussian', sigma=0.5):
     """Matrix NMS for multi-class masks.
     Args:
-        seg_masks (Tensor): shape (n, h, w)
-        cate_labels (Tensor): shape (n), mask labels in descending order
-        cate_scores (Tensor): shape (n), mask scores in descending order
+        masks (Tensor): shape (n, h, w)
+        labels (Tensor): shape (n), mask labels in descending order
+        scores (Tensor): shape (n), mask scores in descending order
         kernel (str):  'linear' or 'gauss'
         sigma (float): std in gaussian method
-        sum_masks (Tensor): The sum of seg_masks
     Returns:
         Tensor: cate_scores_update, tensors of shape (n)
     """
-    n_samples = len(cate_labels)
-    if n_samples == 0:
+
+    N = len(labels)
+    if N == 0:
         return []
-    if sum_masks is None:
-        sum_masks = seg_masks.sum((1, 2)).float()
-    seg_masks = seg_masks.reshape(n_samples, -1).float()
-    # inter.
-    inter_matrix = torch.mm(seg_masks, seg_masks.transpose(1, 0))
-    # union.
-    sum_masks_x = sum_masks.expand(n_samples, n_samples)
-    # iou.
-    iou_matrix = (inter_matrix / (sum_masks_x + sum_masks_x.transpose(1, 0) - inter_matrix)).triu(diagonal=1)
-    # label_specific matrix.
-    cate_labels_x = cate_labels.expand(n_samples, n_samples)
-    label_matrix = (cate_labels_x == cate_labels_x.transpose(1, 0)).float().triu(diagonal=1)
 
-    # IoU compensation
-    compensate_iou, _ = (iou_matrix * label_matrix).max(0)
-    compensate_iou = compensate_iou.expand(n_samples, n_samples).transpose(1, 0)
+    # reshape for computation: Nx(HxW)
+    masks = masks.reshape(N, -1).float()
+    # pre-compute the IoU matrix: NxN
+    inter = torch.mm(masks, masks.T)
+    areas = masks.sum(dim=1).expand(N, N)
+    union = areas + areas.T - inter
+    ious = (inter / union).triu(diagonal=1)
 
-    # IoU decay
-    decay_iou = iou_matrix * label_matrix
+    # max IoU for each: NxN
+    ious_cmax, _ = ious.max(0)
+    ious_cmax = ious_cmax.expand(N, N).T
 
-    # matrix nms
+    # Matrix NMS, Eqn.(4): NxN
     if kernel == 'gaussian':
-        decay_matrix = torch.exp(-1 * sigma * (decay_iou ** 2))
-        compensate_matrix = torch.exp(-1 * sigma * (compensate_iou ** 2))
-        decay_coefficient, _ = (decay_matrix / compensate_matrix).min(0)
-    elif kernel == 'linear':
-        decay_matrix = (1-decay_iou)/(1-compensate_iou)
-        decay_coefficient, _ = decay_matrix.min(0)
-    else:
-        raise NotImplementedError
+        decay = torch.exp(-(ious*ious - ious_cmax*ious_cmax) / sigma)
+    else: # linear
+        decay = (1 - ious) / ( 1 - ious_cmax)
 
-    # update the score.
-    cate_scores_update = cate_scores * decay_coefficient
-    return cate_scores_update
+    decay, _ = decay.min(dim=0)
+    return scores * decay
