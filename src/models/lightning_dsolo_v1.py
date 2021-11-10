@@ -18,7 +18,7 @@ from pathlib import Path
 from torchinfo import summary
 from omegaconf import OmegaConf
 
-from src.modules import Solo_v1
+from src.modules import DSolo_v1
 from src.datasets import get_dataloader
 from src.eval import (
     vis_seg, get_masks,
@@ -31,7 +31,7 @@ ROOT_DIR = Path(osp.abspath(osp.join(osp.abspath(__file__),
                                 osp.pardir)))
 
 
-class Lightning_Solo_v1(pl.LightningModule):
+class Lightning_DSolo_v1(pl.LightningModule):
     def __init__(self, cfgs, debug=False):
         super().__init__()
         self.cfgs = cfgs
@@ -51,7 +51,7 @@ class Lightning_Solo_v1(pl.LightningModule):
 
 
     def configure_model(self):
-        self.model = Solo_v1(self.cfgs['model'])
+        self.model = DSolo_v1(self.cfgs['model'])
 
         if self.cfgs['model']['pretrained'] != '':
             lightning_dict = torch.load(str(ROOT_DIR / self.cfgs['model']['pretrained']), map_location='cpu')
@@ -158,6 +158,7 @@ class Lightning_Solo_v1(pl.LightningModule):
         eval_types = ['segm']
         save_result_file = str(ROOT_DIR / 'results' / 'validation_on_training')
         print('\n\nStarting evaluate {}'.format(' and '.join(eval_types)))
+
         if eval_types == ['proposal_fast']:
             result_file = save_result_file
             coco_eval(result_file, eval_types, self.val_dl.dataset.coco)
@@ -193,9 +194,9 @@ class Lightning_Solo_v1(pl.LightningModule):
 if __name__ == "__main__":
     from pytorch_lightning import seed_everything
 
-    cfg_path = ROOT_DIR / 'configs' / 'experiments' / 'solo_r50_fpn_3x.yaml'
+    cfg_path = ROOT_DIR / 'configs' / 'experiments' / 'light_dsolo_r50_fpn_3x.yaml'
     print(cfg_path)
 
     main_cfg = OmegaConf.load(cfg_path)
     seed_everything(main_cfg['general']['seed'])
-    model = Lightning_Solo_v1(main_cfg, debug=True)
+    model = Lightning_DSolo_v1(main_cfg, debug=True)

@@ -1,1 +1,2 @@
 from .lightning_solo_v1 import Lightning_Solo_v1
+from .lightning_dsolo_v1 import Lightning_DSolo_v1
