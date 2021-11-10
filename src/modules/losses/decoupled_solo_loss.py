@@ -19,7 +19,7 @@ from src.modules.losses import dice_loss, FocalLoss
 from src.modules.utils import multi_apply
 
 
-class SoloLoss():
+class DSoloLoss():
     def __init__(self,
                  num_classes=81,
                  sigma=0.1,
@@ -28,24 +28,25 @@ class SoloLoss():
                  grid_num=[40,36,24,16,12],
                  scale_ranges=((1, 96), (48, 192), (96, 384), (192, 768), (384, 2048))):
 
-        self.cate_out_channels = num_classes - 1
+        self.cate_out_channels = num_classes
         self.sigma = sigma
         self.strides = strides
         self.grid_num = grid_num
         self.scale_ragnes = scale_ranges
         self.mask_loss_weight = mask_loss_weight
         self.loss_cate = FocalLoss(use_sigmoid=True, gamma=2.0, alpha=0.25, loss_weight=1.0)
-        self.target_generator = Solo_targetGEN(sigma, strides, grid_num, scale_ranges)
+        self.target_generator = Solo_targetGEN(sigma, strides, grid_num, scale_ranges, for_decouple=True)
 
     def __call__(self,
-                mask_preds,
+                mask_x_preds,
+                mask_y_preds,
                 cate_preds,
                 gt_bbox_list,
                 gt_label_list,
                 gt_mask_list):
 
-        featmap_sizes = [featmap.size()[-2:] for featmap in mask_preds]
-        mask_label_ls, cate_label_ls, mask_ind_label_ls = \
+        featmap_sizes = [featmap.size()[-2:] for featmap in mask_x_preds]
+        mask_label_ls, cate_label_ls, mask_ind_label_ls, mask_ind_label_xy_ls = \
             multi_apply(self.target_generator.gen_target,
                         gt_bbox_list,
                         gt_label_list,
@@ -53,32 +54,41 @@ class SoloLoss():
                         featmap_sizes=featmap_sizes
             )
 
-        # ins
+        # mask
         mask_labels = [torch.cat([mask_labels_level_img[ins_ind_labels_level_img, ...]
                                     for mask_labels_level_img, ins_ind_labels_level_img in
                                     zip(mask_labels_level, ins_ind_labels_level)], 0)
                         for mask_labels_level, ins_ind_labels_level in zip(zip(*mask_label_ls), zip(*mask_ind_label_ls))]
 
-        mask_preds = [torch.cat([mask_preds_level_img[ins_ind_labels_level_img, ...]
+        mask_x_preds = [torch.cat([mask_preds_level_img[ins_ind_labels_level_img[:, 1], ...]
                                 for mask_preds_level_img, ins_ind_labels_level_img in
                                 zip(mask_preds_level, ins_ind_labels_level)], 0)
-                        for mask_preds_level, ins_ind_labels_level in zip(mask_preds, zip(*mask_ind_label_ls))]
+                        for mask_preds_level, ins_ind_labels_level in zip(mask_x_preds, zip(*mask_ind_label_xy_ls))]
+
+        mask_y_preds = [torch.cat([mask_preds_level_img[ins_ind_labels_level_img[:, 0], ...]
+                                for mask_preds_level_img, ins_ind_labels_level_img in
+                                zip(mask_preds_level, ins_ind_labels_level)], 0)
+                        for mask_preds_level, ins_ind_labels_level in zip(mask_y_preds, zip(*mask_ind_label_xy_ls))]
 
 
-        mask_ind_labels = [
-            torch.cat([mask_ind_labels_level_img.flatten()
-                        for mask_ind_labels_level_img in mask_ind_labels_level])
-            for mask_ind_labels_level in zip(*mask_ind_label_ls)
-        ]
-        flatten_mask_ind_labels = torch.cat(mask_ind_labels)
-        num_mask = flatten_mask_ind_labels.sum()
+        # mask_ind_labels = [
+        #     torch.cat([mask_ind_labels_level_img.flatten()
+        #                 for mask_ind_labels_level_img in mask_ind_labels_level])
+        #     for mask_ind_labels_level in zip(*mask_ind_label_ls)
+        # ]
+        # flatten_mask_ind_labels = torch.cat(mask_ind_labels)
+        # num_mask = flatten_mask_ind_labels.sum()
 
         # dice loss
+        num_mask = 0
         loss_mask = []
-        for input, target in zip(mask_preds, mask_labels):
-            if input.size()[0] == 0:
+        for inp_x, inp_y, target in zip(mask_x_preds, mask_y_preds, mask_labels):
+            mask_n = inp_x.size(0)
+            if mask_n == 0:
                 continue
-            input = torch.sigmoid(input)
+
+            num_mask += mask_n
+            input = (inp_x.sigmoid()) * (inp_y.sigmoid())
             loss_mask.append(dice_loss(input, target))
         loss_mask = torch.cat(loss_mask).mean()
         loss_mask = loss_mask * self.mask_loss_weight
@@ -115,7 +125,7 @@ if __name__ == "__main__":
     from src.datasets import COCODataset
     from src.modules.backbone import deformable_resnet50
     from src.modules.neck import FPN
-    from src.modules.head import SoloHead
+    from src.modules.head import DSoloHead
 
 
     def collate_fn(batch):
@@ -141,12 +151,12 @@ if __name__ == "__main__":
 
     dataloader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0, collate_fn=collate_fn)
     for batch in dataloader:
-        images, targets = batch
+        images, targets, _ = batch
         break
 
     backbone = deformable_resnet50(pretrained=False)
     fpn = FPN(in_chans=[256, 512, 1024, 2048], mid_chans=256, for_detect=True, use_p6=True)
-    head = SoloHead()
+    head = DSoloHead()
 
     backbone.train()
     fpn.train()
@@ -155,13 +165,13 @@ if __name__ == "__main__":
     fake_inp = torch.stack(images, dim=0)
     backbone_output = backbone(fake_inp)
     fpn_output = fpn(backbone_output)
-    mask_output, cate_output = head(fpn_output)
+    mask_x_out, mask_y_out, cate_output = head(fpn_output)
 
     gt_bboxes_list = [target['boxes'] for target in targets]
     gt_labels_list = [target['labels'] for target in targets]
     gt_masks_list = [target['masks'] for target in targets]
 
-    criterion = SoloLoss(num_classes=head.num_classes)
-    losses = criterion.calc_loss(mask_output, cate_output,
-                                gt_bboxes_list, gt_labels_list, gt_masks_list)
+    criterion = DSoloLoss(num_classes=head.num_classes)
+    losses = criterion(mask_x_out, mask_y_out, cate_output,
+                        gt_bboxes_list, gt_labels_list, gt_masks_list)
     print(losses)
