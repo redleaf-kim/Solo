@@ -15,9 +15,9 @@ import modules
 from src.eval import get_masks
 
 
-class Solo_v1(nn.Module):
+class DSolo_v1(nn.Module):
     def __init__(self, cfg, mode='train'):
-        super(Solo_v1, self).__init__()
+        super(DSolo_v1, self).__init__()
 
         self.backbone = getattr(modules, cfg['backbone'])(**cfg.get('backbone_args', {}))
         self.neck = modules.FPN(**cfg.get('fpn_args', {}))
@@ -35,15 +35,15 @@ class Solo_v1(nn.Module):
 
         backbone_out = self.backbone(inp)
         neck_out = self.neck(backbone_out)
-        mask_preds, cate_preds = self.head(neck_out)
+        mask_x_pred, mask_y_pred, cate_preds = self.head(neck_out)
         if self.training:
             gt_bboxes_list = [target['boxes'] for target in targets]
             gt_labels_list = [target['labels'] for target in targets]
             gt_masks_list = [target['masks'] for target in targets]
-            losses = self.solo_loss(mask_preds, cate_preds, gt_bboxes_list, gt_labels_list, gt_masks_list)
+            losses = self.solo_loss(mask_x_pred, mask_y_pred, cate_preds, gt_bboxes_list, gt_labels_list, gt_masks_list)
             return losses
         else:
-            return self.post_process(mask_preds, cate_preds, img_metas=img_metas)
+            return self.post_process(mask_x_pred, mask_y_pred, cate_preds, img_metas=img_metas)
 
 
 
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     root = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
     root = Path(root)
     conf_dir  = root / 'configs' / 'models'
-    conf_name = 'solo_v1'
+    conf_name = 'light_dsolo_v1'
 
     model_cfg_p = conf_dir / f'{conf_name}.yaml'
     model_cfg = OmegaConf.load(root / model_cfg_p)
@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
 
     print('model config:\n', model_cfg)
-    model = Solo_v1(model_cfg)
+    model = DSolo_v1(model_cfg)
 
     summary(model)
 
@@ -114,16 +114,15 @@ if __name__ == '__main__':
 
 
     if mode == "train":
-        print('=' * 5, 'SOLO V1 Train Ouput Information', '=' * 4)
+        print('=' * 5, 'DSOLO V1 Train Ouput Information', '=' * 4)
         for k, v in output.items():
             print(f'{k}: {v}')
             print('-' * 42)
         print('=' * 42)
     else:
-        print('=' * 5, 'SOLO V1 Test Ouput Information', '=' * 4)
+        print('=' * 5, 'DSOLO V1 Test Ouput Information', '=' * 4)
         for out in output:
             mask, cate, cate_score = out
-            result = get_masks([out], num_classes=len(dataset.CLASSES))
 
             print("Mask shape: ", mask.shape)
             print("Cate shape: ", cate.shape)
