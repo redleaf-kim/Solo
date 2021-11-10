@@ -1,12 +1,12 @@
 experiment:
-  name: 'Solo_r50_fpn_3x'
+  name: 'Light_DSolo_r50_fpn_3x'
   group: "v1"
   log_model: true
   wandb: true
   log_step: true
 
 
-model: configs/models/solo_v1.yaml
+model: configs/models/light_dsolo_v1.yaml
 
 
 general:
@@ -16,11 +16,11 @@ general:
   precision: 32
   data_root: ''
   trn_img_size:
-    height: 256
-    width: 256
+    height: 512
+    width: 512
   val_img_size:
-    height: 256
-    width: 256
+    height: 512
+    width: 512
 
   mean: [0.485, 0.456, 0.406]
   std:  [0.229, 0.224, 0.225]
