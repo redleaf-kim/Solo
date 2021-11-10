@@ -29,7 +29,7 @@ def points_nms(heat, kernel=2):
     return heat * keep
 
 
-class SoloHead(nn.Module):
+class DSoloHead(nn.Module):
     def __init__(self,
                  num_classes=81,
                  in_channels=256,
@@ -39,10 +39,10 @@ class SoloHead(nn.Module):
                  grid_num=[40,36,24,16,12],
                  conv_cfg=None,
                  norm_cfg=dict(type='GN', num_groups=32, requires_grad=True), **kwargs):
-        super(SoloHead, self).__init__()
+        super(DSoloHead, self).__init__()
 
         self.num_classes = num_classes
-        self.cls_out_channels = num_classes - 1
+        self.cls_out_channels = num_classes
         self.in_channels = in_channels
         self.feat_channels = feat_channels
         self.stacked_convs = stacked_convs
@@ -74,7 +74,7 @@ class SoloHead(nn.Module):
                     bias=self.norm_cfg is None))
 
         for i in range(self.stacked_convs):
-            chn = self.in_channels + 2 if i == 0 else self.feat_channels
+            chn = self.in_channels + 1 if i == 0 else self.feat_channels
             self.mask_x_convs.append(
                 ConvModule(
                     chn,
@@ -162,7 +162,7 @@ class SoloHead(nn.Module):
         x_mask_feat = torch.cat([mask_feat, x], 1)
         y_mask_feat = torch.cat([mask_feat, y], 1)
 
-        for i, mask_x_layer, mask_y_layer in enumerate(zip(self.mask_x_convs, self.mask_y_convs)):
+        for i, (mask_x_layer, mask_y_layer) in enumerate(zip(self.mask_x_convs, self.mask_y_convs)):
             x_mask_feat = mask_x_layer(x_mask_feat)
             y_mask_feat = mask_y_layer(y_mask_feat)
 
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     fpn = FPN(in_chans=[256, 512, 1024, 2048], mid_chans=256, for_detect=True, use_p6=True)
     fpn.eval()
 
-    head = SoloHead()
+    head = DSoloHead()
     head.eval()
 
     fake_inp = torch.randn(1, 3, 224, 224)

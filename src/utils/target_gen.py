@@ -7,8 +7,10 @@ class Solo_targetGEN:
                  sigma=0.1,
                  strides=(4, 8, 16, 32, 64),
                  grid_num=[40,36,24,16,12],
-                 scale_ranges=((1, 96), (48, 192), (96, 384), (192, 768), (384, 2048)),
+                 scale_ranges=((1, 96), (48, 192), (96, 384), (192, 768), (384, 2048)),\
+                 for_decouple=False,
     ):
+        self.for_decouple = for_decouple
         self.sigma = sigma
         self.scale_ranges = scale_ranges
         self.strides = strides
@@ -47,6 +49,10 @@ class Solo_targetGEN:
         mask_label_ls = []
         cate_label_ls = []
         mask_ind_label_ls = []
+        if self.for_decouple:
+            mask_ind_label_xy_ls = []
+
+
         for (lower_bound, upper_bound), stride, featmap_size, num_grid in zip(self.scale_ranges, self.strides, featmap_sizes, self.grid_num):
             mask_label = torch.zeros([num_grid ** 2, featmap_size[0], featmap_size[1]], dtype=torch.uint8, device=device)
             cate_label = torch.zeros([num_grid, num_grid], dtype=torch.int64, device=device)
@@ -59,6 +65,7 @@ class Solo_targetGEN:
                 mask_label_ls.append(mask_label)
                 cate_label_ls.append(cate_label)
                 mask_ind_label_ls.append(mask_ind_label)
+                mask_ind_label_xy_ls.append(cate_label.nonzero())
                 continue
 
             # 해당되는 영역이 있다면 진행
@@ -110,10 +117,21 @@ class Solo_targetGEN:
                         mask_label[label, :seg_mask.shape[0], :seg_mask.shape[1]] = seg_mask
                         mask_ind_label[label] = True
 
-            mask_label_ls.append(mask_label)
-            cate_label_ls.append(cate_label)
-            mask_ind_label_ls.append(mask_ind_label)
-        return mask_label_ls, cate_label_ls, mask_ind_label_ls
+            if not self.for_decouple:
+                mask_label_ls.append(mask_label)
+                cate_label_ls.append(cate_label)
+                mask_ind_label_ls.append(mask_ind_label)
+            else:
+                mask_label = mask_label[mask_ind_label]
+                mask_label_ls.append(mask_label)
+                cate_label_ls.append(cate_label)
+                mask_ind_label = mask_ind_label[mask_ind_label]
+                mask_ind_label_ls.append(mask_ind_label)
+                mask_ind_label_xy_ls.append(cate_label.nonzero())
+
+        if not self.for_decouple:
+            return mask_label_ls, cate_label_ls, mask_ind_label_ls
+        return mask_label_ls, cate_label_ls, mask_ind_label_ls, mask_ind_label_xy_ls
 
 
 if __name__ == "__main__":
@@ -198,7 +216,7 @@ if __name__ == "__main__":
     mask_output, cate_output = head(fpn_output)
 
     featmap_sizes = [mask.shape[-2:] for mask in mask_output]
-    target_gen = SOLO_TargetGEN()
+    target_gen = Solo_targetGEN()
     mask_label_ls, cate_label_ls, mask_ind_label_ls = \
         target_gen.gen_target(target['boxes'], target['labels'], target['masks'],
                               featmap_sizes=featmap_sizes)
