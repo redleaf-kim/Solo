@@ -21,7 +21,7 @@ from src.models import Lightning_Solo_v1
 ROOT_DIR = osp.abspath(osp.join(osp.dirname(__file__), osp.pardir))
 
 
-# @hydra.main(config_path='../configs/experiments', config_name='solo_r50_fpn_3x')
+# @hydra.main(config_path='../configs/experiments', config_name='light_dsolo_r50_fpn_3x')
 @hydra.main(config_path='../configs')
 def main(cfgs):
     if 'experiments' in cfgs:
@@ -47,7 +47,7 @@ def main(cfgs):
                    'precision': cfgs['general']['precision']}
 
     trainer_cfg['val_check_interval'] = 1
-    trainer_cfg['num_sanity_val_steps'] = -1
+    trainer_cfg['num_sanity_val_steps'] = 10
     trainer_cfg['max_epochs'] = cfgs['general']['epoch']
 
     if cfgs['grad_clip']['use']:
@@ -72,7 +72,6 @@ def main(cfgs):
     checkpoint_dict['every_n_epochs'] = cfgs['general']['save_interval']
     checkpoint_dict['mode'] = 'min'
     checkpoint_callback = ModelCheckpoint(**checkpoint_dict)
-
 
     pl_model = Lightning_Solo_v1(cfgs, debug=False)
     pl_trainer = Trainer(**trainer_cfg, callbacks=[checkpoint_callback])
