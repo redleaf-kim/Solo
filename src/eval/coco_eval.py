@@ -206,6 +206,9 @@ def segm2json_segm(dataset, results):
         img_id = dataset.ids[idx]
         seg = results[idx]
         for label in range(len(seg)):
+            if label == 0: continue
+            else: label -= 1
+
             masks = seg[label]
             for i in range(len(masks)):
                 mask_score = masks[i][1]

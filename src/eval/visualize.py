@@ -21,15 +21,19 @@ def get_masks(result, num_classes=80):
         num_masks = seg_pred.shape[0]
 
         for idx in range(num_masks):
+            cur_label = cate_label[idx]
+            if cur_label == 0: continue
+            else: cur_label -= 1
+
             cur_mask = seg_pred[idx, ...]
             rle = mask_util.encode(
                 np.array(cur_mask[:, :, np.newaxis], order='F'))[0]
             rst = (rle, cate_score[idx])
-            masks[cate_label[idx]].append(rst)
+            masks[cur_label].append(rst)
         return masks
 
 
-def vis_seg(img_list, img_metas, result, score_thr, save_dir):
+def vis_seg(img_list, img_metas, result, score_thr, mask_thr, save_dir):
     assert len(img_list) == len(img_metas)
     class_names = get_classes('coco')
 
@@ -58,7 +62,7 @@ def vis_seg(img_list, img_metas, result, score_thr, save_dir):
         for idx in range(num_mask):
             cur_mask = seg_label[idx, :, :]
             cur_mask = mmcv.imresize(cur_mask, (w, h))
-            cur_mask = (cur_mask > 0.5).astype(np.int32)
+            cur_mask = (cur_mask > mask_thr).astype(np.int32)
             mask_density.append(cur_mask.sum())
         orders = np.argsort(mask_density)
         seg_label = seg_label[orders]
@@ -68,6 +72,12 @@ def vis_seg(img_list, img_metas, result, score_thr, save_dir):
         seg_show = img_show.copy()
         for idx in range(num_mask):
             idx = -(idx+1)
+            cur_cate = cate_label[idx]
+            if cur_cate == 0: continue
+            else: cur_cate -= 1
+
+            cur_score = cate_score[idx]
+
             cur_mask = seg_label[idx, :,:]
             cur_mask = mmcv.imresize(cur_mask, (w, h))
             cur_mask = (cur_mask > 0.5).astype(np.uint8)
@@ -77,9 +87,6 @@ def vis_seg(img_list, img_metas, result, score_thr, save_dir):
                 0, 256, (1, 3), dtype=np.uint8)
             cur_mask_bool = cur_mask.astype(np.bool)
             seg_show[cur_mask_bool] = img_show[cur_mask_bool] * 0.5 + color_mask * 0.5
-
-            cur_cate = cate_label[idx]
-            cur_score = cate_score[idx]
 
             label_text = class_names[cur_cate]
             label_text += '|{:.02f}'.format(cur_score)

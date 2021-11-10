@@ -64,7 +64,7 @@ class COCODataset(Dataset):
                 self.ids.append(idx)
 
         self.coco_ids = sorted(self.coco.getCatIds())
-        self.coco_ids_to_continuous_ids = {coco_id: i for i, coco_id in enumerate(self.coco_ids)}
+        self.coco_ids_to_continuous_ids = {coco_id: i+1 for i, coco_id in enumerate(self.coco_ids)}
         self.coco_ids_to_class_names = {category['id']: category['name'] for category in self.coco.loadCats(self.coco_ids)}
 
         self.image_path = image_path
